@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Cyrene WebUI · cyrene 插件控制台</title>
+<style>
+:root{
+  --bg:#f6efe3;
+  --panel:#fffaf0;
+  --panel-2:#fbf5e7;
+  --border:#e7d9bf;
+  --muted:#9a8b72;
+  --text:#4a3b2f;
+  --accent:#b98a4e;
+  --accent-2:#8c5a22;
+  --accent-soft:#f3e7d3;
+  --link:#6b4a1e;
+  --good:#4f7d3c;
+  --warn:#b2572b;
+  --bad:#a4424a;
+  --radius:12px;
+  --shadow:0 1px 3px rgba(90,70,40,.10), 0 6px 18px rgba(90,70,40,.06);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{font-family:system-ui,"PingFang SC","Microsoft YaHei",sans-serif;background:linear-gradient(180deg,#fbf6ec 0%,#f1e8d5 100%);color:var(--text);margin:0;padding:24px 28px}
+h1{font-size:22px;margin:0 0 4px;letter-spacing:.5px}sub{color:var(--muted);font-weight:normal;font-size:12px;margin-left:6px}
+h2{font-size:16px;margin:18px 0 8px;color:var(--accent-2);letter-spacing:.3px}
+h3{font-size:14px;margin:14px 0 8px;color:var(--accent-2);letter-spacing:.3px}
+a{color:var(--link);text-decoration:none}
+button{font:inherit;background:var(--accent);color:#fffaf0;border:0;border-radius:8px;padding:6px 14px;cursor:pointer;transition:background .15s, transform .05s;box-shadow:0 1px 0 rgba(0,0,0,.05)}
+button:hover{background:var(--accent-2)}
+button:active{transform:translateY(1px)}
+button.secondary{background:transparent;color:var(--accent-2);border:1px solid var(--border);box-shadow:none}
+button.secondary:hover{background:var(--accent-soft)}
+button.del{background:#d9b7b0;padding:2px 10px;font-size:12px}
+button.del:hover{background:#c98c83}
+button.danger{background:#a4424a}
+button.danger:hover{background:#8a3339}
+.muted{color:var(--muted);font-size:12px}
+.ok{color:var(--good);font-size:12px;font-weight:600}
+.warn{color:var(--warn);font-size:12px;font-weight:600}
+.err{color:var(--bad);font-size:12px;font-weight:600}
+
+#layout{display:grid;grid-template-columns:188px 1fr;gap:18px;align-items:flex-start;max-width:1280px;margin:0 auto}
+
+#sidebar{position:sticky;top:24px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:10px 8px;box-shadow:var(--shadow)}
+#sidebar h4{margin:0 4px 8px 4px;font-size:12px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;font-weight:600}
+.navbtn{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:transparent;color:var(--text);margin:1px 0;padding:8px 10px;border-radius:8px;border:0;cursor:pointer;font:inherit;box-shadow:none;transition:background .12s, color .12s}
+.navbtn:hover{background:var(--panel-2)}
+.navbtn.active{background:var(--accent-soft);color:var(--accent-2);font-weight:700}
+.navbtn .ico{width:18px;display:inline-block;text-align:center;opacity:.85}
+
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin:0 0 14px 0;box-shadow:var(--shadow)}
+.card h3{margin-top:0;border-bottom:1px dashed var(--border);padding-bottom:6px}
+
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:6px 0 8px 0}
+.stat{background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.stat b{display:block;font-size:20px;color:var(--accent);font-weight:700;line-height:1.1}
+.stat span{display:block;color:var(--muted);font-size:11px;margin-top:4px}
+
+.field-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
+.field{background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
+.field label{display:block;color:var(--muted);font-size:11px;margin-bottom:4px;letter-spacing:.3px}
+.field input[type=text],.field input[type=number],.field input[type=password],.field select,.field textarea{width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:#fffaf0;font:inherit;font-size:13px;color:var(--text)}
+.field textarea{min-height:54px;font-family:inherit}
+.field input[type=checkbox]{width:16px;height:16px;vertical-align:middle}
+.field .desc{color:var(--muted);font-size:11px;margin-top:4px;line-height:1.4}
+.field input[disabled],.field select[disabled],.field textarea[disabled]{opacity:.6;cursor:not-allowed}
+
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;margin-top:4px}
+th{text-align:left;color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--border);background:var(--panel-2)}
+td{padding:8px 10px;border-bottom:1px solid #f0e7d8;vertical-align:top;line-height:1.5}
+tr:last-child td{border-bottom:0}
+tr:hover td{background:#fdf6e6}
+.src-auto{color:var(--warn);font-weight:600}
+.src-other{color:#8a9b7a}
+
+.quick-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.quick-row .navbtn{flex:1 0 110px;justify-content:center;border:1px solid var(--border)}
+
+.panel-desc{color:var(--muted);font-size:12px;line-height:1.6;margin:0 0 10px 0}
+.toolbar{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}
+.badge{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent-2);font-size:11px;margin-left:6px}
+.toast{margin-top:8px;font-size:12px}
+
+@media (max-width:780px){
+  #layout{grid-template-columns:1fr}
+  #sidebar{position:static;display:flex;flex-wrap:wrap;gap:6px}
+  .navbtn{flex:0 0 auto}
+}
+</style>
+</head>
+<body>
+<h1>Cyrene WebUI<sub>cyrene 插件控制台 · 昔涟私聊引擎（cyrene_neochatter）</sub></h1>
+<div id="layout">
+  <aside id="sidebar">
+    <h4>导航</h4>
+    <div id="navList"></div>
+  </aside>
+  <main id="main">
+    <section class="card" id="userBar">
+      <h3>私聊对象 <span class="muted">按 QQ 分库；切换后各面板只看这一个人</span></h3>
+      <div class="toolbar">
+        <select id="userPick" style="min-width:240px;padding:6px 8px"></select>
+        <span class="muted" id="userHint"></span>
+      </div>
+    </section>
+    <section class="card" id="overview">加载中…</section>
+    <section class="card" id="quickNav">
+      <h3>快速入口</h3>
+      <p class="panel-desc">cyrene 插件的常用功能区快捷入口：</p>
+      <div class="quick-row" id="quickRow"></div>
+    </section>
+    <section class="card" id="card-profile">
+      <h3>画像 L0 / 近期备忘 L1 <span class="muted">可编辑</span></h3>
+      <div class="field-grid" id="profileForm"></div>
+      <div class="toolbar">
+        <div style="flex:1"><span class="muted">近期备忘 L1</span><textarea id="l1Text" rows="2" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:#fffaf0;font-family:inherit;font-size:13px;margin-top:4px"></textarea></div>
+      </div>
+      <div class="toolbar"><button id="saveProfile">保存画像</button><span class="muted toast" id="profileMsg"></span></div>
+    </section>
+    <section class="card" id="card-switches">
+      <h3>功能开关 <span class="muted">运行时，立即生效</span></h3>
+      <p class="panel-desc"><b>接收开关</b>（B 站直播 / 私聊 / 群聊）：关闭后该类消息在消息管线最上游被直接拦截——不回复、不写记忆、不进排队。其余：群聊逐句语音 / 私聊逐句语音 / 语音监听 / 回复前理解 / 滚动摘要 / rerank 可随时切换，存于 data/feature_switches.json，重启后保留。语音功能需 tts_http_server + gsv_tts_provider 已启用。</p>
+      <div class="field-grid" id="switchBox"></div>
+      <div class="muted toast" id="switchHint"></div>
+    </section>
+    <section class="card" id="card-config">
+      <h3>全部配置 <span class="muted">config.toml</span></h3>
+      <p class="panel-desc">自动展示本插件 20 个配置节所有字段，支持保存与类型校验。</p>
+      <div id="configSections"></div>
+      <div class="toolbar"><button id="saveConfig">保存全部配置</button><span class="muted toast" id="configMsg"></span></div>
+    </section>
+    <section class="card" id="card-add">
+      <h3>手动新增语义条目 <span class="muted">参与向量召回</span></h3>
+      <div class="field"><label>内容</label><textarea id="newText" rows="2" placeholder="例如：她喜欢喝热红茶"></textarea><div class="desc">句长控制在 240 字内效果最佳。</div></div>
+      <div class="toolbar"><label style="font-size:12px;color:var(--muted)"><input type="checkbox" id="newEmbed" checked> 生成向量（用于语义召回）</label><button id="addBtn" style="margin-left:auto">保存</button></div>
+    </section>
+    <section class="card" id="card-rel">
+      <h3>关系记录 <span class="muted">relationship</span></h3>
+      <table><thead><tr><th style="width:44px">#</th><th style="width:96px">日期</th><th style="width:80px">来源</th><th>内容 / 关怀提示</th><th style="width:60px"></th></tr></thead><tbody id="relBody"></tbody></table>
+    </section>
+    <section class="card" id="card-ent">
+      <h3>语义条目 <span class="muted">entries</span></h3>
+      <table><thead><tr><th style="width:150px">时间</th><th style="width:80px">来源</th><th>文本</th><th style="width:56px">向量</th><th style="width:60px"></th></tr></thead><tbody id="entBody"></tbody></table>
+    </section>
+    <section class="card" id="card-dfc">
+      <h3>DFC 记忆 <span class="muted">data/cyrene_memory · 群聊/人格层</span></h3>
+      <p class="panel-desc">DFC 侧（default_chatter 人格层）的记忆存储，与私聊引擎的记忆互相独立。</p>
+      <div class="stat-grid" id="dfcStats"></div>
+
+      <h3 style="margin-top:14px">画像 profile</h3>
+      <div class="field"><label>profile（JSON 对象）</label><textarea id="dfcProfile" rows="4" placeholder="{&quot;称呼&quot;: &quot;...&quot;}"></textarea><div class="desc">保存时会过滤空值；需合法 JSON。</div></div>
+      <div class="toolbar"><button id="dfcSaveProfile">保存 DFC 画像</button><button class="secondary" id="dfcImport">重新导入 / 补迁</button><span class="muted toast" id="dfcMsg"></span></div>
+
+      <h3 style="margin-top:14px">手动新增条目</h3>
+      <div class="field"><label>内容</label><textarea id="dfcNewText" rows="2" placeholder="例如：某群成员约定……"></textarea></div>
+      <div class="toolbar"><label style="font-size:12px;color:var(--muted)"><input type="checkbox" id="dfcNewEmbed" checked> 生成向量</label><button id="dfcAddBtn" style="margin-left:auto">保存</button></div>
+
+      <h3 style="margin-top:14px">语义条目 <span class="muted">entries</span></h3>
+      <table><thead><tr><th style="width:150px">时间</th><th style="width:80px">来源</th><th>文本</th><th style="width:56px">向量</th><th style="width:60px"></th></tr></thead><tbody id="dfcEntBody"></tbody></table>
+
+      <h3 style="margin-top:14px">关系记录 <span class="muted">relationship</span></h3>
+      <table><thead><tr><th style="width:44px">#</th><th style="width:96px">日期</th><th>你说</th><th>情绪 / 重要时刻</th><th style="width:60px"></th></tr></thead><tbody id="dfcRelBody"></tbody></table>
+
+      <h3 style="margin-top:14px">WorldBook <span class="muted">背景</span></h3>
+      <table><thead><tr><th style="width:160px">条目</th><th style="width:180px">触发词</th><th>摘要</th><th style="width:60px"></th></tr></thead><tbody id="dfcWbBody"></tbody></table>
+    </section>
+  </main>
+</div>
+<script>
+function esc(v){return String(v==null?"":v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+function fmt(ts){if(!ts){return "-"}var d=new Date(Number(ts)*1000);function p(n){return String(n).padStart(2,"0")}return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes())}
+function clsOf(s){return (String(s||"migrated")==="auto"||String(s)==="manual")?"src-auto":"src-other"}
+function stat(label,n){return "<div class=stat><b>"+n+"</b><span>"+label+"</span></div>"}
+var CURRENT_USER="";
+try{CURRENT_USER=window.localStorage.getItem("cyrene_user")||""}catch(e){CURRENT_USER=""}
+async function api(path,opt){
+  var sep=path.indexOf("?")>=0?"&":"?";
+  var url="./api/"+path+(CURRENT_USER?sep+"user="+encodeURIComponent(CURRENT_USER):"");
+  var r=await fetch(url,opt);return r.json()
+}
+
+var PANELS=[{id:"overview",label:"总览",ico:"◉",els:["overview","quickNav"]},{id:"switches",label:"功能开关",ico:"◆",els:["card-switches"]},{id:"profile",label:"画像 L0/L1",ico:"✎",els:["card-profile"]},{id:"config",label:"全部配置",ico:"⚙",els:["card-config"]},{id:"relationship",label:"关系记录",ico:"☞",els:["card-rel"]},{id:"entries",label:"语义条目",ico:"☰",els:["card-add","card-ent"]},{id:"dfc",label:"DFC 记忆",ico:"☯",els:["card-dfc"]}];
+
+function selectPanel(pid){
+  PANELS.forEach(function(p){
+    var show=(p.id===pid);
+    p.els.forEach(function(eid){
+      var el=document.getElementById(eid);
+      if(el){el.style.display=show?"":"none"}
+    })
+  });
+  var btns=document.querySelectorAll("#navList .navbtn");
+  for(var i=0;i<btns.length;i++){btns[i].className=(btns[i].dataset.panel===pid)?"navbtn active":"navbtn"}
+}
+
+function buildSidebar(){
+  var box=document.getElementById("navList");
+  box.innerHTML="";
+  PANELS.forEach(function(p){
+    var b=document.createElement("button");
+    b.className="navbtn";
+    b.dataset.panel=p.id;
+    b.innerHTML="<span class=ico>"+p.ico+"</span><span>"+p.label+"</span>";
+    b.addEventListener("click",function(){selectPanel(p.id);window.scrollTo({top:0,behavior:"smooth"})});
+    box.appendChild(b)
+  })
+}
+
+function buildQuick(){
+  var row=document.getElementById("quickRow");
+  row.innerHTML="";
+  PANELS.filter(function(p){return p.id!=="overview"}).forEach(function(p){
+    var b=document.createElement("button");
+    b.className="navbtn";
+    b.innerHTML="<span class=ico>"+p.ico+"</span><span>"+p.label+"</span>";
+    b.addEventListener("click",function(){selectPanel(p.id)});
+    row.appendChild(b)
+  })
+}
+
+function fieldControl(sectionName,f){
+  var box=document.createElement("div");
+  box.className="field";
+  var lab=document.createElement("label");
+  lab.textContent=f.label;
+  box.appendChild(lab);
+  var ctrl;
+  var isList=f.type==="list";
+  var isDict=f.type==="dict";
+  if(f.type==="bool"){
+    ctrl=document.createElement("input");
+    ctrl.type="checkbox";
+    ctrl.checked=!!f.value;
+    ctrl.dataset.kind="bool";
+  }else if(Array.isArray(f.choices)&&f.choices.length){
+    ctrl=document.createElement("select");
+    f.choices.forEach(function(ch){
+      var o=document.createElement("option");
+      o.value=String(ch);
+      o.textContent=String(ch);
+      if(String(f.value)===String(ch)){o.selected=true}
+      ctrl.appendChild(o)
+    });
+    ctrl.dataset.kind="str";
+  }else if(f.type==="int"||f.type==="float"){
+    ctrl=document.createElement("input");
+    ctrl.type="number";
+    if(f.ge!==null&&f.ge!==undefined){ctrl.min=f.ge}
+    if(f.le!==null&&f.le!==undefined){ctrl.max=f.le}
+    if(f.step!==null&&f.step!==undefined){ctrl.step=f.step}
+    ctrl.value=(f.value===null||f.value===undefined)?"":f.value;
+    ctrl.dataset.kind=f.type;
+  }else if(isList||isDict||f.input_type==="json"||f.input_type==="textarea"){
+    ctrl=document.createElement("textarea");
+    ctrl.rows=f.rows||(isList?3:4);
+    ctrl.value=isList?((f.value||[]).join(String.fromCharCode(10))):(isDict?JSON.stringify(f.value||{},null,1):String(f.value==null?"":f.value));
+    ctrl.dataset.kind=isList?"list":((isDict||f.input_type==="json")?"json":"str");
+  }else{
+    ctrl=document.createElement("input");
+    ctrl.type=(f.input_type==="password")?"password":"text";
+    ctrl.value=(f.value===null||f.value===undefined)?"":String(f.value);
+    ctrl.dataset.kind="str";
+  }
+  ctrl.dataset.section=sectionName;
+  ctrl.dataset.field=f.name;
+  ctrl.disabled=!!f.disabled;
+  box.appendChild(ctrl);
+  if(f.description||f.hint){
+    var tip=document.createElement("div");
+    tip.className="desc";
+    tip.textContent=f.description||f.hint||"";
+    box.appendChild(tip)
+  }
+  return box
+}
+
+var PROFILE_KEYS=[["nickname","称呼"],["preferredName","喜欢被叫"],["occupation","身份"],["longTermInterests","兴趣/偏好"],["permanentNote","一直想记住的"],["recentGoals","近期目标"],["recentPreferences","近期偏好"],["currentProject","在忙的事"]];
+async function loadProfile(){
+  var j=await api("profile");
+  var l0=j.l0||{};
+  var box=document.getElementById("profileForm");
+  box.innerHTML="";
+  PROFILE_KEYS.forEach(function(kv){
+    var wrap=document.createElement("div");
+    wrap.className="field";
+    var lab=document.createElement("label");
+    lab.textContent=kv[1];
+    wrap.appendChild(lab);
+    var inp=document.createElement("input");
+    inp.type="text";
+    inp.dataset.key=kv[0];
+    inp.value=l0[kv[0]]||"";
+    wrap.appendChild(inp);
+    box.appendChild(wrap)
+  });
+  document.getElementById("l1Text").value=j.l1||""
+}
+
+async function loadConfig(){
+  var j=await api("config");
+  var box=document.getElementById("configSections");
+  box.innerHTML="";
+  j.sections.forEach(function(sec){
+    var secDiv=document.createElement("div");
+    secDiv.style.margin="0 0 14px 0";
+    var h=document.createElement("h3");
+    h.textContent=sec.title;
+    secDiv.appendChild(h);
+    var grid=document.createElement("div");
+    grid.className="field-grid";
+    sec.fields.forEach(function(f){grid.appendChild(fieldControl(sec.name,f))});
+    secDiv.appendChild(grid);
+    box.appendChild(secDiv)
+  })
+}
+
+function parseControl(c){
+  var kind=c.dataset.kind;
+  if(kind==="bool"){return !!c.checked}
+  if(kind==="int"){return parseInt(c.value,10)}
+  if(kind==="float"){return parseFloat(c.value)}
+  if(kind==="list"){return c.value.split(String.fromCharCode(10)).map(function(x){return x.trim()}).filter(function(x){return x.length>0})}
+  if(kind==="json"){try{return JSON.parse(c.value||"{}")}catch(e){throw new Error("JSON 格式错误: "+c.dataset.field)}}
+  return c.value
+}
+
+var SWITCH_LABELS={recv_bilibili_live:"接收 B 站直播弹幕",recv_private:"接收私聊消息",recv_group:"接收群聊消息",understanding:"回复前理解",history_summary:"历史滚动摘要",rerank:"记忆 rerank",voice_reply:"语音回复（私聊每句）",group_voice_reply:"语音回复（群聊每句）",proactive_context:"主动消息注入上下文",proactive_memory:"主动消息注入记忆",asr_listening:"语音监听（ASR）"};
+async function loadSwitches(){
+  var j=await api("switches");
+  var box=document.getElementById("switchBox");
+  box.innerHTML="";
+  Object.keys(j).forEach(function(name){
+    var info=j[name];
+    var wrap=document.createElement("div");
+    wrap.className="field";
+    var lab=document.createElement("label");
+    lab.textContent=SWITCH_LABELS[name]||name;
+    wrap.appendChild(lab);
+    var row=document.createElement("div");
+    row.style.display="flex";
+    row.style.alignItems="center";
+    row.style.gap="8px";
+    var b=document.createElement("button");
+    b.textContent=info.effective?"关闭":"开启";
+    b.dataset.on=info.effective?"1":"0";
+    b.className=info.effective?"":"secondary";
+    b.addEventListener("click",function(){
+      var next=b.dataset.on!=="1";
+      var body={};
+      body[name]=next;
+      api("switches",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({switches:body})}).then(function(){
+        document.getElementById("switchHint").innerHTML="已更新（立即生效，重启后保留）";
+        loadSwitches()
+      }).catch(function(e){document.getElementById("switchHint").innerHTML="<span class=err>失败: "+e.message+"</span>"})
+    });
+    row.appendChild(b);
+    var tip=document.createElement("div");
+    tip.className="desc";
+    tip.textContent="配置默认："+(info.config_default?"开":"关")+" ｜ 当前："+(info.effective?"开":"关");
+    wrap.appendChild(row);
+    wrap.appendChild(tip);
+    box.appendChild(wrap)
+  })
+}
+
+function renderOverview(o){
+  var cards="";
+  cards+=stat("关系",o.relationship_total);
+  cards+=stat("条目",o.entries_total);
+  cards+=stat("WorldBook",o.worldbook);
+  cards+=stat("画像字段",Object.keys(o.l0||{}).length);
+  cards+=stat("L1 字数",String(o.l1||"").length);
+  var html=
+    "<p class=panel-desc>memory.json 的当前摘要与来源分布：</p>"+
+    "<div class=stat-grid>"+cards+"</div>"+
+    "<div class=muted>关系来源: "+esc(JSON.stringify(o.relationship_sources))+" ｜ 条目来源: "+esc(JSON.stringify(o.entries_sources))+"</div>";
+  document.getElementById("overview").innerHTML=html
+}
+
+async function refresh(){
+  var o=await api("overview");
+  renderOverview(o);
+  await loadProfile();
+  await loadSwitches();
+  var rel=await api("relationship?limit=500");
+  var rhtml=[];
+  for(var i=0;i<rel.items.length;i++){
+    var r=rel.items[i];
+    rhtml.push("<tr><td>"+i+"</td><td>"+esc(r.date)+"</td><td class="+clsOf(r.source)+">"+esc(r.source||"migrated")+"</td><td><b>"+esc(r.userText)+"</b><br><span class=muted>情绪: "+esc(r.userMood)+" ｜ 信号: "+esc(r.relationshipSignal)+"<br>关怀: "+esc(r.nextCareCue)+"</span></td><td><button class=del data-act=delrel data-i="+i+">删</button></td></tr>")
+  }
+  document.getElementById("relBody").innerHTML=rhtml.join("")||"<tr><td colspan=5 class=muted>（空）</td></tr>";
+  var en=await api("entries?limit=500");
+  var ehtml=[];
+  for(var j=0;j<en.items.length;j++){
+    var e=en.items[j];
+    ehtml.push("<tr><td>"+fmt(e.createdAt)+"</td><td class="+clsOf(e.source)+">"+esc(e.source||"?")+"</td><td>"+esc(e.text)+"</td><td>"+(e.dim||0)+"</td><td><button class=del data-act=delent data-id="+esc(e.id)+">删</button></td></tr>")
+  }
+  document.getElementById("entBody").innerHTML=ehtml.join("")||"<tr><td colspan=5 class=muted>（空）</td></tr>";
+}
+
+document.getElementById("relBody").addEventListener("click",function(ev){
+  var b=ev.target.closest("button");if(!b||b.dataset.act!=="delrel"){return}
+  if(!confirm("删除该条关系记录？")){return}
+  api("relationship?index="+b.dataset.i,{method:"DELETE"}).then(refresh)
+});
+
+document.getElementById("entBody").addEventListener("click",function(ev){
+  var b=ev.target.closest("button");if(!b||b.dataset.act!=="delent"){return}
+  if(!confirm("删除该条目？")){return}
+  api("entries/"+encodeURIComponent(b.dataset.id),{method:"DELETE"}).then(refresh)
+});
+
+document.getElementById("addBtn").addEventListener("click",function(){
+  var t=document.getElementById("newText").value.trim();if(!t){return}
+  var body=JSON.stringify({text:t,embed:document.getElementById("newEmbed").checked});
+  api("entries",{method:"POST",headers:{"Content-Type":"application/json"},body:body}).then(function(){document.getElementById("newText").value="";refresh()})
+});
+
+document.getElementById("saveProfile").addEventListener("click",function(){
+  var pf={};
+  document.querySelectorAll("#profileForm input").forEach(function(inp){pf[inp.dataset.key]=inp.value.trim()});
+  var body=JSON.stringify({profile:pf,l1:document.getElementById("l1Text").value});
+  api("profile",{method:"POST",headers:{"Content-Type":"application/json"},body:body}).then(function(){document.getElementById("profileMsg").innerHTML="<span class=ok>已保存</span>";refresh()}).catch(function(e){document.getElementById("profileMsg").innerHTML="<span class=err>失败: "+e.message+"</span>"})
+});
+
+document.getElementById("saveConfig").addEventListener("click",function(){
+  try{
+    var values={};
+    document.querySelectorAll("#configSections [data-section]").forEach(function(c){
+      var s=c.dataset.section;var fn=c.dataset.field;
+      values[s]=values[s]||{};
+      values[s][fn]=parseControl(c)
+    });
+    api("config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({values:values})}).then(function(j){document.getElementById("configMsg").innerHTML="<span class=ok>已保存 "+j.changed.length+" 项（部分项需重载插件生效）</span>";loadConfig()}).catch(function(e){document.getElementById("configMsg").innerHTML="<span class=err>失败: "+e.message+"</span>"})
+  }catch(e){document.getElementById("configMsg").innerHTML="<span class=err>失败: "+e.message+"</span>"}
+});
+
+function dfcStat(label,n){return "<div class=stat><b>"+n+"</b><span>"+label+"</span></div>"}
+async function loadDfc(){
+  var o=await api("dfc/overview");
+  document.getElementById("dfcStats").innerHTML=dfcStat("条目",o.entries)+dfcStat("关系",o.relationship)+dfcStat("WorldBook",o.worldbook)+dfcStat("画像字段",o.profile_keys);
+  var p=await api("dfc/profile");
+  document.getElementById("dfcProfile").value=JSON.stringify(p.profile||{},null,1);
+  var en=await api("dfc/entries?limit=500");
+  var ehtml=[];
+  for(var i=0;i<en.items.length;i++){
+    var e=en.items[i];
+    ehtml.push("<tr><td>"+fmt(e.createdAt)+"</td><td>"+esc(e.source||"?")+"</td><td>"+esc(e.text)+"</td><td>"+(e.dim||0)+"</td><td><button class=del data-dfc=delent data-id="+esc(e.id)+">删</button></td></tr>")
+  }
+  document.getElementById("dfcEntBody").innerHTML=ehtml.join("")||"<tr><td colspan=5 class=muted>（空）</td></tr>";
+  var rel=await api("dfc/relationship?limit=200");
+  var rhtml=[];
+  for(var j=0;j<rel.items.length;j++){
+    var r=rel.items[j];
+    rhtml.push("<tr><td>"+r.index+"</td><td>"+esc(r.date)+"</td><td>"+esc(r.userText)+"</td><td><span class=muted>情绪: "+esc(r.userMood)+"<br>重要: "+esc(r.importantMoment)+"<br>关怀: "+esc(r.nextCareCue)+"</span></td><td><button class=del data-dfc=delrel data-i="+r.index+">删</button></td></tr>")
+  }
+  document.getElementById("dfcRelBody").innerHTML=rhtml.join("")||"<tr><td colspan=5 class=muted>（空）</td></tr>";
+  var wb=await api("dfc/worldbook");
+  var whtml=[];
+  for(var k=0;k<wb.items.length;k++){
+    var w=wb.items[k];
+    whtml.push("<tr><td>"+esc(w.name)+"<div class=muted>"+esc(w.file||"")+"</div></td><td>"+esc((w.triggers||[]).join("、"))+"</td><td>"+esc(w.content)+"</td><td><button class=del data-dfc=delwb data-name="+esc(w.name)+">删</button></td></tr>")
+  }
+  document.getElementById("dfcWbBody").innerHTML=whtml.join("")||"<tr><td colspan=4 class=muted>（空）</td></tr>";
+}
+document.getElementById("dfcEntBody").addEventListener("click",function(ev){
+  var b=ev.target.closest("button");if(!b||b.dataset.dfc!=="delent"){return}
+  if(!confirm("删除该 DFC 条目？")){return}
+  api("dfc/entries/"+encodeURIComponent(b.dataset.id),{method:"DELETE"}).then(loadDfc)
+});
+document.getElementById("dfcRelBody").addEventListener("click",function(ev){
+  var b=ev.target.closest("button");if(!b||b.dataset.dfc!=="delrel"){return}
+  if(!confirm("删除该 DFC 关系记录？")){return}
+  api("dfc/relationship?index="+b.dataset.i,{method:"DELETE"}).then(loadDfc)
+});
+document.getElementById("dfcWbBody").addEventListener("click",function(ev){
+  var b=ev.target.closest("button");if(!b||b.dataset.dfc!=="delwb"){return}
+  if(!confirm("删除该 WorldBook 条目？")){return}
+  api("dfc/worldbook?name="+encodeURIComponent(b.dataset.name),{method:"DELETE"}).then(loadDfc)
+});
+document.getElementById("dfcAddBtn").addEventListener("click",function(){
+  var t=document.getElementById("dfcNewText").value.trim();if(!t){return}
+  var body=JSON.stringify({text:t,embed:document.getElementById("dfcNewEmbed").checked});
+  api("dfc/entries",{method:"POST",headers:{"Content-Type":"application/json"},body:body}).then(function(){document.getElementById("dfcNewText").value="";loadDfc()}).catch(function(e){document.getElementById("dfcMsg").innerHTML="<span class=err>失败: "+e.message+"</span>"})
+});
+document.getElementById("dfcSaveProfile").addEventListener("click",function(){
+  try{
+    var pf=JSON.parse(document.getElementById("dfcProfile").value||"{}");
+    api("dfc/profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profile:pf})}).then(function(){document.getElementById("dfcMsg").innerHTML="<span class=ok>DFC 画像已保存</span>";loadDfc()}).catch(function(e){document.getElementById("dfcMsg").innerHTML="<span class=err>失败: "+e.message+"</span>"})
+  }catch(e){document.getElementById("dfcMsg").innerHTML="<span class=err>JSON 解析失败: "+e.message+"</span>"}
+});
+document.getElementById("dfcImport").addEventListener("click",function(){
+  document.getElementById("dfcMsg").innerHTML="导入中…";
+  api("dfc/import/refresh",{method:"POST",body:"{}"}).then(function(j){document.getElementById("dfcMsg").innerHTML="<span class=ok>导入完成: "+esc(JSON.stringify(j))+"</span>";loadDfc()}).catch(function(e){document.getElementById("dfcMsg").innerHTML="<span class=err>失败: "+e.message+"</span>"})
+});
+// ── 私聊对象选择器（按 QQ 分库）──────────────
+async function loadUsers(){
+  var sel=document.getElementById("userPick");
+  var hint=document.getElementById("userHint");
+  try{
+    var j=await api("users");
+    var users=j.users||[];
+    sel.innerHTML="";
+    users.forEach(function(u){
+      var o=document.createElement("option");
+      o.value=u.user_id;
+      o.textContent=u.user_id+(u.label?(" · "+u.label):"")+((u.has_strat||u.has_dfc)?"":"（暂无数据）");
+      sel.appendChild(o);
+    });
+    if(!CURRENT_USER && j.default){setUser(j.default);return true}
+    if(users.length){sel.value=CURRENT_USER||j.default||users[0].user_id}
+    hint.textContent="共 "+users.length+" 个私聊对象";
+  }catch(e){
+    hint.innerHTML="<span class=err>读取失败: "+e.message+"</span>";
+  }
+  return false;
+}
+function setUser(id){
+  CURRENT_USER=id||"";
+  try{window.localStorage.setItem("cyrene_user",CURRENT_USER)}catch(e){}
+}
+document.getElementById("userPick").addEventListener("change",function(){
+  setUser(this.value);
+  location.reload();
+});
+(async function boot(){
+  var needReload=await loadUsers();
+  if(needReload){location.reload();return}
+  buildSidebar();
+  buildQuick();
+  selectPanel("overview");
+  loadConfig();
+  loadDfc();
+  refresh();
+})();
+</script>
+</body>
+</html>

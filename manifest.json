@@ -1,0 +1,62 @@
+{
+  "name": "cyrene_neochatter",
+  "display_name": "Cyrene NeoChatter（昔涟私聊引擎）",
+  "version": "1.4.0",
+  "description": "独立私聊引擎：分层记忆 + 心理活动流 + 主动想起/勿扰/预约，模型全走 API 并预留本地接口。",
+  "author": "cyrene 昔涟~",
+  "dependencies": {
+    "plugins": [],
+    "components": []
+  },
+  "include": [
+    {
+      "component_type": "config",
+      "component_name": "config",
+      "dependencies": []
+    },
+    {
+      "component_type": "chatter",
+      "component_name": "cyrene_neochatter",
+      "dependencies": [],
+      "enabled": true
+    },
+    {
+      "component_type": "router",
+      "component_name": "cyrene_neochatter_memory_admin",
+      "dependencies": [],
+      "enabled": true
+    },
+    {
+      "component_type": "event_handler",
+      "component_name": "cyrene_receive_filter",
+      "dependencies": [],
+      "enabled": true
+    },
+    {
+      "component_type": "event_handler",
+      "component_name": "cyrene_persona_injector",
+      "dependencies": [],
+      "enabled": true
+    },
+    {
+      "component_type": "event_handler",
+      "component_name": "cyrene_style_injector",
+      "dependencies": [],
+      "enabled": true
+    },
+    {
+      "component_type": "event_handler",
+      "component_name": "cyrene_memory_injector",
+      "dependencies": [],
+      "enabled": true
+    },
+    {
+      "component_type": "event_handler",
+      "component_name": "cyrene_memory_writer",
+      "dependencies": [],
+      "enabled": true
+    }
+  ],
+  "entry_point": "plugin.py",
+  "min_core_version": "1.0.0"
+}
