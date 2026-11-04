@@ -47,6 +47,27 @@ class Inference:
         await response
         return str(getattr(response, "message", "") or "")
 
+    async def chat_with_tools(
+        self, chatter: Any, system: str, user: str, *, max_tokens: int | None = None
+    ) -> tuple[Any, Any]:
+        """构建带工具 schema 的请求，返回 (request, registry)。"""
+        if self.backend != "api":
+            raise LocalNotReadyError("backend=local 预留接口尚未实现，请改用 api")
+        from src.kernel.llm import LLMPayload, ROLE, Text
+
+        task = getattr(self._cfg.general, "model_task", "actor") or "actor"
+        cap = int(max_tokens or getattr(self._cfg.llm, "max_tokens", 8000) or 8000)
+        request = chatter.create_request(task=task, request_name="cyrene_neochatter")
+        if cap and cap > 0:
+            request.model_set = [
+                dict(m, max_tokens=min(int(m.get("max_tokens") or cap), cap))
+                for m in request.model_set
+            ]
+        request.add_payload(LLMPayload(ROLE.SYSTEM, Text(system)))
+        request.add_payload(LLMPayload(ROLE.USER, Text(user)))
+        registry = await chatter.inject_usables(request)
+        return request, registry
+
     async def embed(self, text: str) -> list[float]:
         """单条文本向量。"""
         if self.backend != "api":

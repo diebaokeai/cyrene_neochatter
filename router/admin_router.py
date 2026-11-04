@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from src.app.plugin_system.api import log_api
-from src.app.plugin_system.api.feature_switch_api import get_switch, set_switch
+from ..compat import get_switch, set_switch
 from src.core.components import BaseRouter
 from src.core.components.base.config import SectionBase
 
@@ -135,6 +135,19 @@ class NeoChatterMemoryAdminRouter(BaseRouter):
         except FileNotFoundError as exc:
             raise RuntimeError("memory_admin.html 不存在，无法加载管理后台") from exc
 
+    @staticmethod
+    def _usage_db_path() -> Path:
+        """LLM 统计库路径（与 core.toml 的 llm_stats.db_path 保持一致）。"""
+
+        raw = ""
+        try:
+            from src.core.config import get_core_config
+
+            raw = str(get_core_config().llm_stats.db_path or "").strip()
+        except Exception:
+            raw = ""
+        return Path(raw or "data/llm_stats/llm_stats.db")
+
     async def _embed_text(self, text: str) -> list[float] | None:
         """给文本生成向量（失败返回 None，条目仍会保存只是不可语义召回）。"""
         try:
@@ -242,6 +255,126 @@ class NeoChatterMemoryAdminRouter(BaseRouter):
         async def admin_page() -> HTMLResponse:
             """记忆管理主页。"""
             return HTMLResponse(self._load_html())
+
+        @self.app.get("/api/usage")
+        async def get_usage(hours: int = Query(default=24, ge=1, le=720)) -> dict[str, Any]:
+            """返回 LLM 用量、费用与缓存命中统计（只读 llm_stats.db）。"""
+
+            import sqlite3
+
+            db_path = self._usage_db_path()
+            if not db_path.exists():
+                return {"ok": False, "error": f"统计库不存在: {db_path}", "db": str(db_path)}
+
+            def _ratio(hit: int, prompt: int) -> float:
+                return round(100.0 * hit / prompt, 1) if prompt else 0.0
+
+            now = time.time()
+            con = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
+            con.row_factory = sqlite3.Row
+            try:
+                windows: list[dict[str, Any]] = []
+                for span in (1, 3, 6, 24, 72):
+                    row = con.execute(
+                        """select count(*) as n,
+                                  coalesce(sum(prompt_tokens), 0) as p,
+                                  coalesce(sum(completion_tokens), 0) as c,
+                                  coalesce(sum(cache_hit_tokens), 0) as h,
+                                  coalesce(sum(cost), 0) as cost
+                           from llm_requests
+                           where timestamp > ? and success = 1""",
+                        (now - span * 3600,),
+                    ).fetchone()
+                    prompt = int(row["p"] or 0)
+                    hit = int(row["h"] or 0)
+                    windows.append(
+                        {
+                            "hours": span,
+                            "requests": int(row["n"] or 0),
+                            "prompt": prompt,
+                            "completion": int(row["c"] or 0),
+                            "hit": hit,
+                            "ratio": _ratio(hit, prompt),
+                            "cost": round(float(row["cost"] or 0), 4),
+                        }
+                    )
+
+                def _grouped(sql: str, limit: int) -> list[dict[str, Any]]:
+                    items: list[dict[str, Any]] = []
+                    for row in con.execute(sql, (now - hours * 3600, limit)):
+                        prompt = int(row["p"] or 0)
+                        hit = int(row["h"] or 0)
+                        items.append(
+                            {
+                                "name": str(row["name"] or "(unknown)"),
+                                "requests": int(row["n"] or 0),
+                                "prompt": prompt,
+                                "hit": hit,
+                                "ratio": _ratio(hit, prompt),
+                                "cost": round(float(row["cost"] or 0), 4),
+                            }
+                        )
+                    return items
+
+                by_model = _grouped(
+                    """select model_name as name, count(*) as n,
+                              coalesce(sum(prompt_tokens), 0) as p,
+                              coalesce(sum(cache_hit_tokens), 0) as h,
+                              coalesce(sum(cost), 0) as cost
+                       from llm_requests
+                       where timestamp > ? and success = 1
+                       group by model_name order by p desc limit ?""",
+                    10,
+                )
+                by_request = _grouped(
+                    """select request_name as name, count(*) as n,
+                              coalesce(sum(prompt_tokens), 0) as p,
+                              coalesce(sum(cache_hit_tokens), 0) as h,
+                              coalesce(sum(cost), 0) as cost
+                       from llm_requests
+                       where timestamp > ? and success = 1
+                       group by request_name order by p desc limit ?""",
+                    12,
+                )
+
+                daily: list[dict[str, Any]] = []
+                for row in con.execute(
+                    """select date(timestamp, 'unixepoch', 'localtime') as d,
+                              count(*) as n,
+                              coalesce(sum(prompt_tokens), 0) as p,
+                              coalesce(sum(cache_hit_tokens), 0) as h,
+                              coalesce(sum(cost), 0) as cost
+                       from llm_requests
+                       where timestamp > ? and success = 1
+                       group by d order by d desc limit 7""",
+                    (now - 7 * 86400,),
+                ):
+                    prompt = int(row["p"] or 0)
+                    hit = int(row["h"] or 0)
+                    daily.append(
+                        {
+                            "date": str(row["d"] or ""),
+                            "requests": int(row["n"] or 0),
+                            "prompt": prompt,
+                            "hit": hit,
+                            "ratio": _ratio(hit, prompt),
+                            "cost": round(float(row["cost"] or 0), 4),
+                        }
+                    )
+                daily.reverse()
+            finally:
+                con.close()
+
+            return {
+                "ok": True,
+                "generated_at": int(now),
+                "db": str(db_path),
+                "hours": hours,
+                "windows": windows,
+                "by_model": by_model,
+                "by_request": by_request,
+                "daily": daily,
+            }
 
         def _switch_snapshot() -> dict[str, Any]:
             cfg = self._config()

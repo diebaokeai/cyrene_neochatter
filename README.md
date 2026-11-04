@@ -101,7 +101,7 @@ owner 取 [memory] legacy_owner_id，留空则取 [general] user_ids 的第一�
 |---|---|
 | l0 | 长期画像（昵称/偏好/身份等） |
 | l1 | 近期滚动备忘（对象压成可读文本） |
-| l2 / evidence / reflection / conflict | 迁移的深层记录（当前未消费） |
+| l2 / evidence / reflection / conflict | 深层记录（l2 参与定期 L2→L1 压缩，其余按配置注入） |
 | relationship | 逐轮关系记录（userText / userMood / importantMoment / nextCareCue …） |
 | entries | 语义记忆条目（text + embedding，供向量召回/去重） |
 | worldbook | 已解析的 WorldBook 条目（resident/triggers/content） |
@@ -127,11 +127,13 @@ owner 取 [memory] legacy_owner_id，留空则取 [general] user_ids 的第一�
 
 ### 5.4 自动写入（[memory_write]）
 
-- 每 interval_turns=6 回合触发一次；
-- 用 utils_small 任务抽取 JSON：relationship（情绪信号/重要时刻/下次关怀线索）与
-  memory_candidate（稳定信息）；
-- 写 relationship 前校验开关；entries 带向量并在 dedupe_min_score=0.86 以上时跳过；
-- 写入失败不影响回合（仅记 warning）。
+- 每 interval_turns 回合触发一次，并受 min_interval_seconds 节流；
+- 用 task 任务抽取 JSON：relationship（情绪信号/重要时刻/下次关怀线索）与
+  memory_candidate/memory_candidates（稳定信息）；
+- 写 relationship 前校验开关；entries 带向量并在 dedupe_min_score 以上时跳过；
+- 每个已解析用户按成功回合持久化计数；达到 compress_every_n_rounds 后，使用
+  compress_task 将较旧 L2 合并到 L1，保留最近事件与未压缩事件；压缩失败不删除 L2；
+- 写入或压缩失败不影响回合（仅记 warning）。
 
 ---
 
@@ -178,7 +180,8 @@ owner 取 [memory] legacy_owner_id，留空则取 [general] user_ids 的第一�
 
 - [wait] 定时唤醒未接入：回合一律 Wait() 无限等待新消息；
 - mental.save_to_file、proactive 预约（scheduled_at/paused）无写入方；
-- L2→L1 压缩（compress_every_n_rounds）与 rerank（rerank_task）已预留未消费；
+- L2→L1 压缩只对已解析 user_id 的用户分库生效；解析失败时使用共享库但不会自动压缩共享库；
+- rerank（rerank_task）仍是可选能力，未配置时使用本地余弦排序兜底；
 - llm.backend="local" 会抛 LocalNotReadyError（未实现）；
 - 单轮无工具调用/子代理，只发纯文本（图片表情包经 emoji_sender 服务兜底而非模型动作）；
 - ASCII 颜文字仅提示约束、不硬剥离。

@@ -13,6 +13,11 @@ STYLE_FILES: list[str] = [
     "01_default.md", "02_lively.md", "03_healing.md", "04_focused.md", "05_sweet.md",
 ]
 
+# 私聊默认额外注入的工具：拍照/发图。reply 动作由引擎自动注入，不在此列。
+DEFAULT_TOOL_ALLOW: tuple[str, ...] = (
+    "nai_artist:action:share_photo",
+)
+
 
 class CyreneNeoConfig(BaseConfig):
     config_name: ClassVar[str] = "config"
@@ -21,6 +26,7 @@ class CyreneNeoConfig(BaseConfig):
     @config_section("general", title="基础", tag="plugin")
     class GeneralSection(SectionBase):
         enabled: bool = Field(default=False, description="是否启用引擎（默认关闭，开启后接管私聊）")
+        takeover_private: bool = Field(default=True, description="是否由本引擎接管私聊；关闭后私聊交给 default_chatter（带 actor 决策与工具调用）")
         model_task: str = Field(default="actor", description="主对话 LLM 模型任务（model.toml 中 task）")
         private_only: bool = Field(default=True, description="仅私聊；群聊直接放行给其它 chatter")
         user_ids: list[str] = Field(default_factory=list, description="仅对名单内用户（私聊）生效；留空=所有私聊", tag="list")
@@ -29,9 +35,25 @@ class CyreneNeoConfig(BaseConfig):
     @config_section("llm", title="推理接口", tag="ai")
     class LLMSection(SectionBase):
         backend: str = Field(default="api", description="api=走 MoFox LLM API；local=预留本地推理接口（尚未实现，会提示）", input_type="select", choices=["api", "local"])
+        tool_enabled: bool = Field(default=True, description="是否允许私聊工具调用（下载版工具循环）")
+        tool_allow: list[str] = Field(default_factory=list, description="允许注入的工具名；空集合=不限制")
+        tool_max_rounds: int = Field(default=3, ge=1, le=6, description="工具循环最大轮数")
         embed_task: str = Field(default="embedding", description="向量模型任务（bge-m3）")
         rerank_task: str = Field(default="", description="可选 rerank 任务名；留空表示不使用 rerank")
         max_tokens: int = Field(default=8000, ge=256, le=128000, description="单次输出上限")
+
+    @config_section("reply", title="回复决策", tag="plugin")
+    class ReplySection(SectionBase):
+        enabled: bool = Field(default=True, description="用 reply 工具做决策式回复（关闭后退回纯文本直出）")
+        max_segments: int = Field(default=6, ge=1, le=20, description="最多拆成几条消息发送（超出的合并进最后一条）")
+        strip_metadata: bool = Field(default=True, description="正文混入「思考:/心情:」等元数据时截断")
+        show_panel: bool = Field(default=False, description="在控制台额外打印彩色决策面板（日志文件始终记录）")
+        max_tool_rounds: int = Field(default=3, ge=1, le=6, description="一次回复里允许的模型轮数（含附加工具执行后的续轮）")
+
+    @config_section("tools", title="附加工具", tag="llm")
+    class ToolsSection(SectionBase):
+        allow: list[str] = Field(default_factory=lambda: list(DEFAULT_TOOL_ALLOW), description="reply 之外额外注入的工具组件签名（如 nai_artist:action:share_photo）；留空=只给 reply", tag="list")
+        blocked: list[str] = Field(default_factory=list, description="额外屏蔽的工具名（默认已屏蔽 send_text / pass_and_wait / stop_conversation）", tag="list")
 
     @config_section("wait", title="等待", tag="timer")
     class WaitSection(SectionBase):
@@ -99,6 +121,7 @@ class CyreneNeoConfig(BaseConfig):
         dedupe_min_score: float = Field(default=0.86, ge=0.0, le=1.0)
         compress_every_n_rounds: int = Field(default=50, ge=0, le=1000, description="每 N 回合压缩 L2→L1（0=关闭）")
         compress_task: str = Field(default="utils_small")
+        compress_model: str = Field(default="", description="L2→L1 压缩使用的模型名；留空则使用 compress_task 对应的任务模型")
 
     @config_section("understanding", title="回复前理解", tag="ai")
     class UnderstandingSection(SectionBase):
@@ -133,7 +156,7 @@ class CyreneNeoConfig(BaseConfig):
         enabled: bool = Field(default=False, description="开启后私聊每句话都会合成一条语音发出（需 tts_http_server + gsv_tts_provider 已启用）")
         mode: str = Field(default="after_text", description="after_text=先发文字再补一条语音；voice_only=只发语音（合成失败自动退回文字）", input_type="select", choices=["after_text", "voice_only"])
         provider: str = Field(default="", description="TTS provider 名称；留空=服务端默认（如 gsv）")
-        endpoint: str = Field(default="http://127.0.0.1:8002/router/tts_http_server/api/tts/v1/synthesize", description="HTTP 回退用的 TTS 接口（进程内服务不可用时使用，端口按 core.toml http_router_port）")
+        endpoint: str = Field(default="http://127.0.0.1:8000/router/tts_http_server/api/tts/v1/synthesize", description="HTTP 回退用的 TTS 接口（进程内服务不可用时使用，端口按 core.toml http_router_port）")
         timeout: float = Field(default=30.0, ge=1.0, le=300.0, description="单句 TTS 超时（秒）")
         max_chars: int = Field(default=120, ge=10, le=500, description="单句超过该字数则不合成语音（避免超长）")
         mime_type: str = Field(default="audio/wav", description="请求 TTS 时声明的 MIME 类型")
@@ -146,6 +169,8 @@ class CyreneNeoConfig(BaseConfig):
 
     general: GeneralSection = Field(default_factory=GeneralSection)
     llm: LLMSection = Field(default_factory=LLMSection)
+    reply: ReplySection = Field(default_factory=ReplySection)
+    tools: ToolsSection = Field(default_factory=ToolsSection)
     wait: WaitSection = Field(default_factory=WaitSection)
     proactive: ProactiveSection = Field(default_factory=ProactiveSection)
     mental: MentalSection = Field(default_factory=MentalSection)
@@ -256,6 +281,12 @@ class CyreneNeoConfig(BaseConfig):
             ],
             description="言行红线条目，逐条以「- 」追加到人格层末尾",
             label="红线条目",
+            tag="list",
+        )
+        emphasis: list[str] = Field(
+            default_factory=list,
+            description="人格重点：2~4 条希望每轮优先体现的可观察行为，追加到人格层最末尾（优先级最高）。留空则不注入。",
+            label="人格重点",
             tag="list",
         )
         override_intro: bool = Field(

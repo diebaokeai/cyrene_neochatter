@@ -112,6 +112,28 @@ tr:hover td{background:#fdf6e6}
       <p class="panel-desc">cyrene 插件的常用功能区快捷入口：</p>
       <div class="quick-row" id="quickRow"></div>
     </section>
+    <section class="card" id="card-usage">
+      <h3>用量统计 <span class="muted">data/llm_stats · 只读</span></h3>
+      <div class="toolbar">
+        <select id="usageWindow" style="padding:6px 8px">
+          <option value="1">近 1 小时</option>
+          <option value="3">近 3 小时</option>
+          <option value="6">近 6 小时</option>
+          <option value="24" selected>近 24 小时</option>
+          <option value="72">近 72 小时</option>
+        </select>
+        <button id="usageRefresh">刷新</button>
+        <span class="muted toast" id="usageMsg">加载中…</span>
+      </div>
+      <div class="stat-grid" id="usageStats"></div>
+      <h3>按模型 <span class="muted" id="usageModelTitle">近 24 小时</span></h3>
+      <table><thead><tr><th>模型</th><th>请求</th><th>Prompt</th><th>命中</th><th>命中率</th><th>费用</th></tr></thead><tbody id="usageModelBody"></tbody></table>
+      <h3>按请求类型 <span class="muted" id="usageReqTitle">近 24 小时</span></h3>
+      <table><thead><tr><th>请求</th><th>请求数</th><th>Prompt</th><th>命中率</th><th>费用</th></tr></thead><tbody id="usageReqBody"></tbody></table>
+      <h3>近 7 天</h3>
+      <table><thead><tr><th>日期</th><th>请求</th><th>Prompt</th><th>命中率</th><th>费用</th></tr></thead><tbody id="usageDailyBody"></tbody></table>
+      <p class="muted" id="usageNote"></p>
+    </section>
     <section class="card" id="card-profile">
       <h3>画像 L0 / 近期备忘 L1 <span class="muted">可编辑</span></h3>
       <div class="field-grid" id="profileForm"></div>
@@ -182,7 +204,7 @@ async function api(path,opt){
   var r=await fetch(url,opt);return r.json()
 }
 
-var PANELS=[{id:"overview",label:"总览",ico:"◉",els:["overview","quickNav"]},{id:"switches",label:"功能开关",ico:"◆",els:["card-switches"]},{id:"profile",label:"画像 L0/L1",ico:"✎",els:["card-profile"]},{id:"config",label:"全部配置",ico:"⚙",els:["card-config"]},{id:"relationship",label:"关系记录",ico:"☞",els:["card-rel"]},{id:"entries",label:"语义条目",ico:"☰",els:["card-add","card-ent"]},{id:"dfc",label:"DFC 记忆",ico:"☯",els:["card-dfc"]}];
+var PANELS=[{id:"overview",label:"总览",ico:"◉",els:["overview","quickNav"]},{id:"usage",label:"用量统计",ico:"▤",els:["card-usage"]},{id:"switches",label:"功能开关",ico:"◆",els:["card-switches"]},{id:"profile",label:"画像 L0/L1",ico:"✎",els:["card-profile"]},{id:"config",label:"全部配置",ico:"⚙",els:["card-config"]},{id:"relationship",label:"关系记录",ico:"☞",els:["card-rel"]},{id:"entries",label:"语义条目",ico:"☰",els:["card-add","card-ent"]},{id:"dfc",label:"DFC 记忆",ico:"☯",els:["card-dfc"]}];
 
 function selectPanel(pid){
   PANELS.forEach(function(p){
@@ -194,6 +216,7 @@ function selectPanel(pid){
   });
   var btns=document.querySelectorAll("#navList .navbtn");
   for(var i=0;i<btns.length;i++){btns[i].className=(btns[i].dataset.panel===pid)?"navbtn active":"navbtn"}
+  if(pid==="usage"){loadUsage()}
 }
 
 function buildSidebar(){
@@ -496,6 +519,43 @@ document.getElementById("dfcImport").addEventListener("click",function(){
   document.getElementById("dfcMsg").innerHTML="导入中…";
   api("dfc/import/refresh",{method:"POST",body:"{}"}).then(function(j){document.getElementById("dfcMsg").innerHTML="<span class=ok>导入完成: "+esc(JSON.stringify(j))+"</span>";loadDfc()}).catch(function(e){document.getElementById("dfcMsg").innerHTML="<span class=err>失败: "+e.message+"</span>"})
 });
+// ── 用量统计（llm_stats.db）──────────────────
+function fmtNum(n){n=Number(n||0);if(n>=1000000){return (n/1000000).toFixed(1)+"M"}if(n>=1000){return (n/1000).toFixed(1)+"k"}return String(n)}
+function fmtCost(n){return "¥"+Number(n||0).toFixed(3)}
+function usageRow(cells){return "<tr>"+cells.map(function(c){return "<td>"+c+"</td>"}).join("")+"</tr>"}
+async function loadUsage(){
+  var msg=document.getElementById("usageMsg");
+  var sel=document.getElementById("usageWindow");
+  var hours=sel?sel.value:"24";
+  if(msg){msg.textContent="加载中…";msg.className="muted toast"}
+  try{
+    var d=await api("usage?hours="+encodeURIComponent(hours));
+    if(!d.ok){if(msg){msg.textContent="加载失败："+(d.error||"未知错误");msg.className="muted toast err"}return}
+    var w=(d.windows||[]).filter(function(x){return String(x.hours)===String(hours)})[0]||{};
+    document.getElementById("usageStats").innerHTML=
+      stat("请求数",fmtNum(w.requests))+
+      stat("Prompt tokens",fmtNum(w.prompt))+
+      stat("Completion tokens",fmtNum(w.completion))+
+      stat("缓存命中率",(Number(w.ratio)||0).toFixed(1)+"%")+
+      stat("费用",fmtCost(w.cost));
+    var label=(sel&&sel.options[sel.selectedIndex])?sel.options[sel.selectedIndex].text:"近 24 小时";
+    document.getElementById("usageModelTitle").textContent=label;
+    document.getElementById("usageReqTitle").textContent=label;
+    document.getElementById("usageModelBody").innerHTML=(d.by_model||[]).map(function(x){
+      return usageRow([esc(x.name),fmtNum(x.requests),fmtNum(x.prompt),fmtNum(x.hit),(Number(x.ratio)||0).toFixed(1)+"%",fmtCost(x.cost)])
+    }).join("")||"<tr><td colspan=6 class=muted>暂无数据</td></tr>";
+    document.getElementById("usageReqBody").innerHTML=(d.by_request||[]).map(function(x){
+      return usageRow([esc(x.name),fmtNum(x.requests),fmtNum(x.prompt),(Number(x.ratio)||0).toFixed(1)+"%",fmtCost(x.cost)])
+    }).join("")||"<tr><td colspan=5 class=muted>暂无数据</td></tr>";
+    document.getElementById("usageDailyBody").innerHTML=(d.daily||[]).map(function(x){
+      return usageRow([esc(x.date),fmtNum(x.requests),fmtNum(x.prompt),(Number(x.ratio)||0).toFixed(1)+"%",fmtCost(x.cost)])
+    }).join("")||"<tr><td colspan=5 class=muted>暂无数据</td></tr>";
+    document.getElementById("usageNote").textContent="统计库："+d.db+" · 更新时间："+fmt(Math.floor(Date.now()/1000));
+    if(msg){msg.textContent="已更新";msg.className="muted toast ok"}
+  }catch(e){if(msg){msg.textContent="加载失败："+e;msg.className="muted toast err"}}
+}
+document.getElementById("usageRefresh").addEventListener("click",loadUsage);
+document.getElementById("usageWindow").addEventListener("change",loadUsage);
 // ── 私聊对象选择器（按 QQ 分库）──────────────
 async function loadUsers(){
   var sel=document.getElementById("userPick");

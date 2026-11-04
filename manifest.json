@@ -21,6 +21,12 @@
       "enabled": true
     },
     {
+      "component_type": "action",
+      "component_name": "reply",
+      "dependencies": [],
+      "enabled": true
+    },
+    {
       "component_type": "router",
       "component_name": "cyrene_neochatter_memory_admin",
       "dependencies": [],

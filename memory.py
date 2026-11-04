@@ -72,6 +72,52 @@ def save_store(base: str, data: dict[str, Any]) -> None:
     _write_json(store_path(base), data)
 
 
+L2_COMPRESSION_KEEP_RECENT = 20
+"""L2 压缩时保留的最近事件数，避免摘要失败时失去即时细节。"""
+
+
+def ensure_l2_event_ids(data: dict[str, Any]) -> bool:
+    """为缺少 ID 的 L2 事件补稳定的进程外 ID。"""
+
+    changed = False
+    events = data.setdefault("l2", [])
+    if not isinstance(events, list):
+        data["l2"] = []
+        return True
+    seen: set[str] = set()
+    for item in events:
+        if not isinstance(item, dict):
+            continue
+        event_id = str(item.get("id") or "").strip()
+        if not event_id or event_id in seen:
+            event_id = "l2_" + uuid.uuid4().hex
+            item["id"] = event_id
+            changed = True
+        seen.add(event_id)
+    return changed
+
+
+def select_l2_compression_snapshot(
+    data: dict[str, Any],
+    *,
+    watermark: int = 0,
+    keep_recent: int = L2_COMPRESSION_KEEP_RECENT,
+    max_events: int = 60,
+) -> tuple[list[dict[str, Any]], int]:
+    """选择尚未压缩的旧 L2，并返回快照和新的列表水位。"""
+
+    events = data.get("l2")
+    if not isinstance(events, list):
+        return [], 0
+    keep = max(0, int(keep_recent))
+    end = max(0, len(events) - keep)
+    start = min(max(0, int(watermark)), end)
+    limit = max(1, int(max_events))
+    stop = min(end, start + limit)
+    selected = [dict(item) for item in events[start:stop] if isinstance(item, dict)]
+    return selected, stop
+
+
 # ── WorldBook md 解析（与 F 桌 prompts/worldbook 格式一致）──────────
 def parse_worldbook_dir(directory: Path) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []

@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from typing import Any, cast
 
-from src.app.plugin_system.api.feature_switch_api import get_switch
+from .compat import get_switch
 from src.app.plugin_system.api.log_api import get_logger
 from src.core.components.base import BaseEventHandler
 from src.core.components.types import EventType
@@ -101,6 +101,15 @@ def _build_personality_block(cfg: CyreneConfig) -> str:
         )
         if red_lines:
             parts.append("# 言行红线（最高优先级，任何表达性描述都不得覆盖本条）" + _NL2 + red_lines)
+
+    if cfg.persona.emphasis:
+        emphasis_lines = _NL2.join(
+            "- " + str(line).strip() for line in cfg.persona.emphasis if str(line).strip()
+        )
+        if emphasis_lines:
+            parts.append(
+                "# 人格重点（每次回复都要优先体现，冲突时优先于以上描述）" + _NL2 + emphasis_lines
+            )
 
     return _NL2.join(part for part in parts if part.strip())
 

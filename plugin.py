@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from src.app.plugin_system.api.log_api import get_logger
-from src.app.plugin_system.api.text_policy import strip_emoji as _strip_emoji, strip_tool_markup as _strip_tool_markup
+from .compat import strip_emoji as _strip_emoji, strip_tool_markup as _strip_tool_markup
 from src.core.components import BasePlugin, register_plugin
 
 from .config import CyreneNeoConfig
@@ -46,7 +46,6 @@ class CyreneNeoPlugin(BasePlugin):
         super().__init__(config)
         self._proactive_task_id: str | None = None
         self._webui_task_id: str | None = None
-        self._cnc_turn_count = 0
         self._cnc_streams: set[str] = set()
         self._cnc_proactive: dict[str, dict[str, float | str]] = {}
         self._cnc_meme_last: dict[str, float] = {}
@@ -177,9 +176,10 @@ class CyreneNeoPlugin(BasePlugin):
         components: list[type] = [
             # 接收开关（B 站直播 / 私聊 / 群聊）必须先注册：它是消息管线最上游的闸门
             CyreneReceiveFilter,
-            CyreneNeoChatter,
             NeoChatterMemoryAdminRouter,
         ]
+        if cfg.general.takeover_private:
+            components.append(CyreneNeoChatter)
         if cfg.dfc_plugin.enabled:
             components.extend([
                 CyrenePersonaInjector,
@@ -189,11 +189,37 @@ class CyreneNeoPlugin(BasePlugin):
             ])
         return components
 
+    def _ensure_memory_mcp_config(self) -> None:
+        """把内置 memory MCP 自动写入 config/mcp.toml（缺失时）。"""
+
+        try:
+            import sys
+            from pathlib import Path as _Path
+
+            config_path = _Path("config/mcp.toml")
+            script_path = _Path(__file__).with_name("memory_mcp.py")
+            if not config_path.exists() or not script_path.exists():
+                return
+            text = config_path.read_text(encoding="utf-8")
+            if "[mcp.stdio_servers.memory]" in text:
+                return
+            block = (
+                "\n# 记忆 MCP（由 cyrene_neochatter 自动写入）\n"
+                "[mcp.stdio_servers.memory]\n"
+                f"command = {str(sys.executable)!r}\n"
+                f"args = [{str(script_path)!r}]\n"
+            )
+            config_path.write_text(text.rstrip() + "\n" + block, encoding="utf-8")
+            logger.info("已自动写入 memory MCP 配置")
+        except Exception as exc:
+            logger.warning(f"写入 memory MCP 配置失败: {exc}")
+
     async def on_plugin_loaded(self) -> None:
         cfg = self.config if isinstance(self.config, CyreneNeoConfig) else CyreneNeoConfig()
         if not cfg.general.enabled:
             logger.info("cyrene_neochatter 默认关闭，跳过初始化")
             return
+        self._ensure_memory_mcp_config()
         # 旧版单人布局 -> 按 QQ 分库（幂等；owner = memory.legacy_owner_id 或名单第一个人）
         strat_root = cfg.memory.data_dir or "data/cyrene_neochatter"
         dfc_root = cfg.memory_store.data_dir or "data/cyrene_memory"
@@ -383,7 +409,7 @@ class CyreneNeoPlugin(BasePlugin):
     def _proactive_on(key: str, default: bool) -> bool:
         """主动想起的运行时开关（Cyrene WebUI - 功能开关，热加载、重启保留）。"""
         try:
-            from src.app.plugin_system.api.feature_switch_api import get_switch
+            from .compat import get_switch
 
             return bool(get_switch(key, bool(default)))
         except Exception:
