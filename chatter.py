@@ -39,6 +39,7 @@ from .memory import (
 from .mental_log import MentalLog
 from .persona import WORLDBOOK_DIR, assemble_system_persona, match_worldbook
 from .pre_understanding import format_understanding, understand_turn
+from .style_guard import polish
 
 logger = None  # 由 plugin 注入避免 import 环；运行时惰性获取
 _MEMORY_LOCKS: dict[str, asyncio.Lock] = {}
@@ -1148,6 +1149,7 @@ class CyreneNeoChatter(BaseChatter):
         state: Any = request
         response: Any = None
         tool_ok = False
+        last_signature: Any = None
         try:
             for _ in range(rounds):
                 response = await state.send(stream=False)
@@ -1158,6 +1160,17 @@ class CyreneNeoChatter(BaseChatter):
                 calls = list(getattr(response, "call_list", None) or [])
                 if not calls:
                     break
+                signature = tuple(
+                    (
+                        str(getattr(c, "name", "") or ""),
+                        repr(getattr(c, "args", None)),
+                    )
+                    for c in calls
+                )
+                if signature == last_signature:
+                    _get_logger().warning("重复的相同工具调用，停止本回合工具循环")
+                    break
+                last_signature = signature
                 _get_logger().info(
                     f"本轮工具调用: {[getattr(c, 'name', '') for c in calls]}"
                 )
@@ -1172,8 +1185,9 @@ class CyreneNeoChatter(BaseChatter):
             if response is not None
             else ""
         )
-        if not text and not tool_ok:
-            return (await self._get_infer().chat(system, user) or "").strip(), False
+        if not text:
+            # 工具轮次消费掉了正文：补一次无工具纯文本，避免整回合沉默
+            text = (await self._get_infer().chat(system, user) or "").strip()
         return text, tool_ok
 
     async def _decide(self, system: str, user: str, trigger_msg: Any = None) -> "ReplyDecision | None":
@@ -1186,7 +1200,11 @@ class CyreneNeoChatter(BaseChatter):
             reply, tool_ok = "", False
         thought = getattr(self, "_last_thought", "")
         if reply:
-            segments = _split_reply_sentences(reply) or [reply]
+            raw_segments = _split_reply_sentences(reply) or [reply]
+            segments = [polish(item) for item in raw_segments]
+            segments = [item for item in segments if item]
+            if not segments:
+                segments = [reply]
             decision = ReplyDecision(segments=self._clip_segments(segments), thought=thought)
             self._log_decision(decision)
             return decision
